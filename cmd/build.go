@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	_ "os/exec"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -30,6 +30,8 @@ import (
 
 const SCRIPT = "local_build.sh"
 const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /app {{.Container}} sh {{.Script}} /dest/{{.Output}}"
+
+var rootDir string
 
 type Config struct {
 	Path        string
@@ -50,7 +52,7 @@ func cwd() string {
 
 func dockerCmd(scriptPath, outFile, destDir string) string {
 	//fmt.Println(scriptPath)
-	destDir = path.Join(cwd(), destDir)
+	destDir = destDir
 	fullPath, err := filepath.Abs(scriptPath)
 	tmpl, err := template.New("test").Parse(TEMPL)
 	if err != nil {
@@ -96,16 +98,22 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		destDir := "work_dir"
+		destDir := filepath.Join(rootDir, "run_dir")
+		fmt.Println(destDir)
 		for _, arg := range args {
 			c1 := dockerCmd(arg, "primary-soln", destDir)
 			fmt.Println(c1)
+			dockerCmds := strings.Split(c1, " ")
+			//fmt.Println(dockerCmds)
+			out, err := exec.Command("docker", dockerCmds[1:]...).Output()
+			fmt.Printf("out: %s, err: %s\n", out, err)
 		}
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(buildCmd)
+	rootDir, _ = filepath.Abs(".")
 
 	// Here you will define your flags and configuration settings.
 

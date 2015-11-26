@@ -85,6 +85,7 @@ to quickly create a Cobra application.`,
 
 		json.Unmarshal(data, &v)
 		fmt.Println(v)
+		rootDir, _ := filepath.Abs(".")
 		workdir := "work_dir"
 		//var repo, owner string
 		fmt.Println(v.PrimarySolution.Url)
@@ -110,6 +111,10 @@ to quickly create a Cobra application.`,
 			out, err := exec.Command("git", "clone", gitUrl).Output()
 			fmt.Printf("out: %s, err: %s\n", out, err)
 		}
+		fmt.Println(rootDir)
+		a1 := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, v.PrimarySolution.Path)
+		fmt.Println(a1)
+		buildCmd.Run(nil, []string{a1})
 		//client := github.NewClient(nil)
 		//opt := &github.RepositoryContentGetOptions{"master"}
 		//doIt(client, "maddyonline", "epibook.github.io", opt)
