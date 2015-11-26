@@ -19,9 +19,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"os"
+	"path/filepath"
 )
 
 var cfgFile string
+var rootDirectory string
+var destDirectory string
 
 // This represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -54,6 +57,9 @@ func init() {
 	// Cobra supports Persistent Flags, which, if defined here,
 	// will be global for your application.
 
+	rootDirectory, _ = filepath.Abs(".")
+
+	RootCmd.PersistentFlags().StringVar(&destDirectory, "dest", "tempdir", "destination to store generated binary files")
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hey.yaml)")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

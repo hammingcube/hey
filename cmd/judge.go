@@ -112,9 +112,28 @@ to quickly create a Cobra application.`,
 			fmt.Printf("out: %s, err: %s\n", out, err)
 		}
 		fmt.Println(rootDir)
-		a1 := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, v.PrimarySolution.Path)
-		fmt.Println(a1)
-		buildCmd.Run(nil, []string{a1})
+		primary_soln := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, v.PrimarySolution.Path)
+		gen := filepath.Join(rootDir, workdir, v.PrimaryGenerator.Url, v.PrimaryGenerator.Path)
+		runtest := filepath.Join(rootDir, workdir, v.PrimaryRunner.Url, v.PrimaryRunner.Path)
+
+		buildCmd.Run(nil, []string{runtest, "runtest"})
+		buildCmd.Run(nil, []string{gen, "gen"})
+		buildCmd.Run(nil, []string{solnDir, "my-soln"})
+		buildCmd.Run(nil, []string{primary_soln, "primary-soln"})
+
+		destDir := filepath.Join(rootDirectory, destDirectory)
+		runCmd := fmt.Sprintf("docker run --rm -v %s:/app -w /app ubuntu ./runtest ./gen ./my-soln ./primary-soln", destDir)
+		cmds := strings.Split(runCmd, " ")
+		finalOutput, err := exec.Command("docker", cmds[1:]...).CombinedOutput()
+		fmt.Println(runCmd)
+		fmt.Println(finalOutput)
+		fmt.Println(err)
+		jsonBytes, err := ioutil.ReadFile(path.Join(destDir, "status.json"))
+		fmt.Println(string(jsonBytes))
+		fmt.Println()
+
+		//c5 := fmt.Sprintf(runCmd, binDir)
+
 		//client := github.NewClient(nil)
 		//opt := &github.RepositoryContentGetOptions{"master"}
 		//doIt(client, "maddyonline", "epibook.github.io", opt)
