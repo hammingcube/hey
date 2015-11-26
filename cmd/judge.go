@@ -17,10 +17,17 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/go-github/github"
+	_ "github.com/phayes/hookserve/hookserve"
 	"github.com/spf13/cobra"
 	"io/ioutil"
+	"log"
+	"net/url"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 const PROBLEM_CONFIG = "problem-config.json"
@@ -78,7 +85,81 @@ to quickly create a Cobra application.`,
 
 		json.Unmarshal(data, &v)
 		fmt.Println(v)
+		workdir := "work_dir"
+		//var repo, owner string
+		fmt.Println(v.PrimarySolution.Url)
+		lookFor := filepath.Join(workdir, v.PrimarySolution.Url, ".git")
+		fmt.Println(lookFor)
+
+		if _, err := os.Stat(lookFor); err == nil {
+			fmt.Println("Found Directory")
+			os.Chdir(filepath.Join(workdir, v.PrimarySolution.Url))
+			out, err := exec.Command("git", "pull").Output()
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("The output of command is %s\n", out)
+		} else {
+			fmt.Println("Cannot find directory")
+			dir, _ := filepath.Abs(filepath.Join(workdir, v.PrimarySolution.Url))
+			fmt.Printf("Making %s directory\n", dir)
+			err := os.MkdirAll(dir, 0777)
+			os.Chdir(filepath.Join(dir, ".."))
+			gitUrl := fmt.Sprintf("https://%s", v.PrimarySolution.Url)
+			fmt.Println(gitUrl)
+			out, err := exec.Command("git", "clone", gitUrl).Output()
+			fmt.Printf("out: %s, err: %s\n", out, err)
+		}
+		//client := github.NewClient(nil)
+		//opt := &github.RepositoryContentGetOptions{"master"}
+		//doIt(client, "maddyonline", "epibook.github.io", opt)
+
 	},
+}
+
+func sPtr(s string) *string { return &s }
+
+func downloadArchive(url *url.URL, dest string) {
+	log.Printf("Downloading: %s\n", url)
+	cmd := exec.Command("curl", "-o", dest, "-O", url.String())
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
+func extractArchive(zipFile, outputDir string) {
+	log.Printf("Extracting...\n")
+	cmd := exec.Command("unzip", zipFile, "-d", outputDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
+
+func doIt(client *github.Client, owner, repo string, opt *github.RepositoryContentGetOptions) (string, string, string) {
+	url, _, err := client.Repositories.GetArchiveLink(owner, repo, github.Zipball, opt)
+	if err != nil {
+		log.Fatal(err)
+	}
+	downloadArchive(url, "abc.zip")
+	os.Mkdir("unique_dir", 0777)
+	extractArchive("abc.zip", "unique_dir")
+	dirs, err := ioutil.ReadDir("unique_dir")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Found following directories:\n%v\n", dirs[0].Name())
+	filename := path.Join("unique_dir", dirs[0].Name(), "runtests.json")
+	data, err := ioutil.ReadFile(filename)
+	var runTestsConfig map[string]string
+	var problem, mySolnDir string
+	json.Unmarshal(data, &runTestsConfig)
+	log.Printf("Read:%s\n", runTestsConfig)
+	arr := strings.Split(runTestsConfig["runtests"], ",")
+	if len(arr) > 1 {
+		problem = arr[0]
+		mySolnDir = arr[1]
+	}
+	fmt.Printf("problem: %s, mysolnDir: %s\n", problem, mySolnDir)
+	return path.Join("unique_dir", dirs[0].Name()), problem, mySolnDir
 }
 
 func init() {
