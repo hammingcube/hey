@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package build
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	. "github.com/maddyonline/hey/cmd"
+	"github.com/maddyonline/hey/utils"
 	"github.com/spf13/cobra"
 	"io/ioutil"
 	"log"
@@ -101,7 +101,7 @@ var (
 )
 
 // buildCmd represents the build command
-var buildCmd = &cobra.Command{
+var BuildCmd = &cobra.Command{
 	Use:   "build",
 	Short: fmt.Sprintf("Builds a program based on %s", SCRIPT),
 	Long: fmt.Sprintf(`Builds a program stored on local filesystem. The input is the path to directory. 
@@ -113,8 +113,8 @@ The input directory must contain file %s which is used to build the file.`, SCRI
 			return
 		}
 		src, binary := args[0], args[1]
-		destDir := filepath.Join(rootDirectory, destDirectory)
-		destDir, err = createDirIfReqd(destDir)
+		destDir := "" //filepath.Join(rootDirectory, destDirectory)
+		destDir, err = utils.CreateDirIfReqd(destDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			return
@@ -131,7 +131,6 @@ The input directory must contain file %s which is used to build the file.`, SCRI
 }
 
 func init() {
-	RootCmd.AddCommand(buildCmd)
 	//out := new(bytes.Buffer)
 	//fmt.Println(string(out.Bytes()))
 	// Here you will define your flags and configuration settings.
@@ -142,6 +141,6 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	buildCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Dry run the command")
+	BuildCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Dry run the command")
 
 }
