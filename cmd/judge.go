@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package judge
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/go-github/github"
 	_ "github.com/phayes/hookserve/hookserve"
@@ -28,25 +30,71 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 )
 
+func longUsage() string {
+	b := &bytes.Buffer{}
+	w := new(tabwriter.Writer)
+	raw := []string{
+		"raw mode:\tSimply run the program and return it's output.",
+		"i/o mode:\tJudge with respect to given input/output files.",
+		"std mode:\tJudge against a primary-solution using a primary-runner and a primary-generator for test cases."}
+	w.Init(b, 0, 8, 0, '\t', 0)
+	for _, r := range raw {
+		fmt.Fprintln(w, r)
+	}
+	w.Flush()
+	return fmt.Sprintf("Primarily used to judge an input program. Builds and runs an input program and 'judges' the output.\n%s", b)
+}
+
 const PROBLEM_CONFIG = "problem-config.json"
+
+var opts = struct {
+	DryRun         bool
+	Raw            bool
+	DoNotUseDocker bool
+	Language       string
+}{}
+
+func init() {
+	RootCmd.AddCommand(judgeCmd)
+
+	// Here you will define your flags and configuration settings.
+
+	// Cobra supports Persistent Flags which will work for this command
+	// and all subcommands, e.g.:
+	// judgeCmd.PersistentFlags().String("foo", "", "A help for foo")
+
+	// Cobra supports local flags which will only run when this command
+	// is called directly, e.g.:
+	judgeCmd.Flags().BoolVarP(&opts.DryRun, "dry-run", "d", false, "Dry run the command")
+	judgeCmd.Flags().BoolVarP(&opts.Raw, "raw", "r", false, "Use the raw mode of judging")
+	judgeCmd.Flags().BoolVarP(&opts.DoNotUseDocker, "without-docker", "w", false, "Do not use docker")
+	judgeCmd.Flags().StringVarP(&opts.Langauge, "language", "l", "", "The programming language of input program")
+}
+
+func validateArgs(args []string) error {
+	if len(args) < 1 {
+		return errors.New("Need at least one argument (input program directory)")
+	}
+	return nil
+}
 
 // judgeCmd represents the judge command
 var judgeCmd = &cobra.Command{
 	Use:   "judge",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Builds, runs, and judges an input program",
+	Long:  longUsage(),
 	Run: func(cmd *cobra.Command, args []string) {
-		solnDir := "."
-		if len(args) > 0 {
-			solnDir = args[0]
+		if err := validateArgs(args); err != nil {
+			fmt.Printf("%v\n", err)
+			return
 		}
+		solnDir = args[0]
+
+		fmt.Printf("%v\n", opts)
+		return
 		solnDir, err := filepath.Abs(solnDir)
 		if err != nil {
 			fmt.Println("Error resolving path: %s", err)
@@ -184,19 +232,4 @@ func doIt(client *github.Client, owner, repo string, opt *github.RepositoryConte
 	}
 	fmt.Printf("problem: %s, mysolnDir: %s\n", problem, mySolnDir)
 	return path.Join("unique_dir", dirs[0].Name()), problem, mySolnDir
-}
-
-func init() {
-	RootCmd.AddCommand(judgeCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// judgeCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// judgeCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
 }

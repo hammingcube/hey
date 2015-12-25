@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -87,25 +88,43 @@ func dockerCmd(scriptPath, outFile, destDir string) string {
 	return b.String()
 }
 
+func validateArgs(args []string) error {
+	if len(args) < 2 {
+		return errors.New("Need at least two arguments (source and binary)")
+	}
+	return nil
+}
+
+var (
+	dryRun bool
+)
+
 // buildCmd represents the build command
 var buildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: fmt.Sprintf("Builds a program based on %s", SCRIPT),
+	Long: fmt.Sprintf(`Builds a program stored on local filesystem. The input is the path to directory. 
+The input directory must contain file %s which is used to build the file.`, SCRIPT),
 	Run: func(cmd *cobra.Command, args []string) {
+		err := validateArgs(args)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return
+		}
+		src, binary := args[0], args[1]
 		destDir := filepath.Join(rootDirectory, destDirectory)
-		fmt.Println(destDir)
-		src := args[0]
-		binary := args[1]
-		c1 := dockerCmd(src, binary, destDir)
-		fmt.Println(c1)
-		dockerCmds := strings.Split(c1, " ")
-		out, err := exec.Command("docker", dockerCmds[1:]...).Output()
+		destDir, err = createDirIfReqd(destDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return
+		}
+		command := dockerCmd(src, binary, destDir)
+		if dryRun {
+			fmt.Println(command)
+			return
+		}
+		dockerCmd := strings.Split(command, " ")
+		out, err := exec.Command(dockerCmd[0], dockerCmd[1:]...).Output()
 		fmt.Printf("out: %v, err: %v\n", out, err)
 	},
 }
@@ -122,6 +141,6 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// buildCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	buildCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Dry run the command")
 
 }
