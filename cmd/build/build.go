@@ -18,29 +18,37 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/maddyonline/hey/utils"
 	"github.com/spf13/cobra"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
 )
 
 const SCRIPT = "local_build.sh"
-const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /app {{.Container}} sh {{.Script}} /dest/{{.Output}}"
+const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /app {{.Container}} sh -c"
+
+var ScriptTemplates = map[string]map[string]string{
+	"cpp": map[string]string{
+		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
+		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec &&  /dest/exec {{if .Input}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}",
+	},
+}
 
 var rootDir string
 
 type Config struct {
-	Path        string
-	Container   string
-	Script      string
+	Src         string
 	Destination string
 	Output      string
+	Path        string
+	Input       string
+	Lang        string
+	Container   string
+	Script      string
+	Langauge    string
 }
 
 func cwd() string {
@@ -52,41 +60,46 @@ func cwd() string {
 	return dir
 }
 
-func dockerCmd(scriptPath, outFile, destDir string) string {
-	//fmt.Println(scriptPath)
-	destDir = destDir
-	fullPath, err := filepath.Abs(scriptPath)
-	tmpl, err := template.New("test").Parse(TEMPL)
+func MustStr(t string, err error) string {
 	if err != nil {
 		panic(err)
 	}
+	return t
+}
+
+func dockerCmd(src, outFile string) []string {
 	containersMap := map[string]string{
 		"cpp":    "glot/clang",
 		"golang": "glot/golang",
 	}
 
-	scriptSrc := path.Join(scriptPath, SCRIPT)
-	script, err := ioutil.ReadFile(scriptSrc)
-	lines := strings.Split(string(script), "\n")
-	var lang string
-	//fmt.Println(lines[0])
-	fmt.Sscanf(lines[0], "# Language: %s", &lang)
-	//fmt.Println(lang)
-
+	lang := "cpp"
 	config := &Config{
-		Path:        fullPath,
+		Src:         filepath.Base(src),
+		Path:        MustStr(filepath.Abs(filepath.Dir(src))),
+		Output:      filepath.Base(outFile),
+		Destination: MustStr(filepath.Abs(filepath.Dir(outFile))),
+		Input:       "", //filepath.Join(filepath.Dir(src), "input.txt"),
+		Lang:        lang,
 		Container:   containersMap[lang],
-		Script:      SCRIPT,
-		Destination: destDir,
-		Output:      outFile,
 	}
 
 	var b bytes.Buffer
-	err = tmpl.Execute(&b, config)
+	scriptTemplate := template.Must(template.New("script").Parse(ScriptTemplates[lang]["compile-and-run"]))
+	err := scriptTemplate.Execute(&b, config)
 	if err != nil {
 		panic(err)
 	}
-	return b.String()
+	config.Script = b.String()
+
+	var b2 bytes.Buffer
+	mainTemplate := template.Must(template.New("main").Parse(TEMPL))
+	err = mainTemplate.Execute(&b2, config)
+	if err != nil {
+		panic(err)
+	}
+	commandSlice := append(strings.Split(b2.String(), " "), fmt.Sprintf("%s", config.Script))
+	return commandSlice
 }
 
 func validateArgs(args []string) error {
@@ -112,21 +125,23 @@ The input directory must contain file %s which is used to build the file.`, SCRI
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			return
 		}
-		src, binary := args[0], args[1]
-		destDir := "" //filepath.Join(rootDirectory, destDirectory)
-		destDir, err = utils.CreateDirIfReqd(destDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			return
-		}
-		command := dockerCmd(src, binary, destDir)
+		src, outFile := args[0], args[1]
+		command := dockerCmd(src, outFile)
 		if dryRun {
-			fmt.Println(command)
+			//fmt.Printf("%#v\n", command)
+			fmt.Printf("%s \"%s\"\n", strings.Join(command[:len(command)-1], " "), command[len(command)-1])
 			return
 		}
-		dockerCmd := strings.Split(command, " ")
-		out, err := exec.Command(dockerCmd[0], dockerCmd[1:]...).Output()
-		fmt.Printf("out: %v, err: %v\n", out, err)
+		var out bytes.Buffer
+		var stderr bytes.Buffer
+		execCmd := exec.Command(command[0], command[1:]...)
+		execCmd.Stdout = &out
+		execCmd.Stderr = &stderr
+		err = execCmd.Run()
+		if err != nil {
+			fmt.Println(fmt.Sprint(err) + ": " + stderr.String())
+			return
+		}
 	},
 }
 
@@ -142,5 +157,4 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	BuildCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Dry run the command")
-
 }
