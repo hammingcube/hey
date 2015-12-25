@@ -1,9 +1,22 @@
 package utils
 
 import (
+	"github.com/labstack/gommon/log"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 )
+
+func UpdateFile(file, val string) error {
+	dir := filepath.Dir(file)
+	log.Info("creating dir %s", dir)
+	dir, err := CreateDirIfReqd(dir)
+	if err != nil {
+		return err
+	}
+	ioutil.WriteFile(filepath.Join(dir, filepath.Base(file)), []byte(val), 0777)
+	return nil
+}
 
 func CreateDirIfReqd(dir string) (string, error) {
 	dirAbsPath, err := filepath.Abs(dir)
