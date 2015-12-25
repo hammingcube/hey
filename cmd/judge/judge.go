@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/go-github/github"
-	. "github.com/maddyonline/hey/cmd/common"
+	"github.com/maddyonline/hey/cmd/build"
 	_ "github.com/phayes/hookserve/hookserve"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -52,15 +52,13 @@ func longUsage() string {
 const PROBLEM_CONFIG = "problem-config.json"
 
 var opts = struct {
-	DryRun         bool
-	Raw            bool
-	DoNotUseDocker bool
-	Language       string
+	DryRun   bool
+	Raw      bool
+	NoDocker bool
+	Language string
 }{}
 
 func init() {
-	RootCmd.AddCommand(judgeCmd)
-
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
@@ -69,10 +67,10 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	judgeCmd.Flags().BoolVarP(&opts.DryRun, "dry-run", "d", false, "Dry run the command")
-	judgeCmd.Flags().BoolVarP(&opts.Raw, "raw", "r", false, "Use the raw mode of judging")
-	judgeCmd.Flags().BoolVarP(&opts.DoNotUseDocker, "without-docker", "w", false, "Do not use docker")
-	judgeCmd.Flags().StringVarP(&opts.Langauge, "language", "l", "", "The programming language of input program")
+	JudgeCmd.Flags().BoolVarP(&opts.DryRun, "dry-run", "d", false, "Dry run the command")
+	JudgeCmd.Flags().BoolVarP(&opts.Raw, "raw", "r", false, "Use the raw mode of judging")
+	JudgeCmd.Flags().BoolVarP(&opts.NoDocker, "no-docker", "n", false, "Do not use docker")
+	JudgeCmd.Flags().StringVarP(&opts.Language, "language", "l", "", "The programming language of input program")
 }
 
 func validateArgs(args []string) error {
@@ -83,7 +81,7 @@ func validateArgs(args []string) error {
 }
 
 // judgeCmd represents the judge command
-var judgeCmd = &cobra.Command{
+var JudgeCmd = &cobra.Command{
 	Use:   "judge",
 	Short: "Builds, runs, and judges an input program",
 	Long:  longUsage(),
@@ -92,9 +90,12 @@ var judgeCmd = &cobra.Command{
 			fmt.Printf("%v\n", err)
 			return
 		}
-		solnDir = args[0]
+		destDirectory, _ := cmd.Flags().GetString("dest")
 
-		fmt.Printf("%v\n", opts)
+		solnDir := args[0]
+		fmt.Printf("%#v\n", opts)
+		fmt.Printf("%#v\n", args)
+		fmt.Printf("%#v\n", destDirectory)
 		return
 		solnDir, err := filepath.Abs(solnDir)
 		if err != nil {
@@ -165,10 +166,12 @@ var judgeCmd = &cobra.Command{
 		gen := filepath.Join(rootDir, workdir, v.PrimaryGenerator.Url, v.PrimaryGenerator.Path)
 		runtest := filepath.Join(rootDir, workdir, v.PrimaryRunner.Url, v.PrimaryRunner.Path)
 
-		buildCmd.Run(nil, []string{runtest, "runtest"})
-		buildCmd.Run(nil, []string{gen, "gen"})
-		buildCmd.Run(nil, []string{solnDir, "my-soln"})
-		buildCmd.Run(nil, []string{primary_soln, "primary-soln"})
+		build.BuildCmd.Run(nil, []string{runtest, "runtest"})
+		build.BuildCmd.Run(nil, []string{gen, "gen"})
+		build.BuildCmd.Run(nil, []string{solnDir, "my-soln"})
+		build.BuildCmd.Run(nil, []string{primary_soln, "primary-soln"})
+
+		rootDirectory, _ := cmd.Flags().GetString("rootDirectory")
 
 		destDir := filepath.Join(rootDirectory, destDirectory)
 		runCmd := fmt.Sprintf("docker run --rm -v %s:/app -w /app ubuntu ./runtest ./gen ./my-soln ./primary-soln", destDir)
