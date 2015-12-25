@@ -1,17 +1,3 @@
-// Copyright © 2015 NAME HERE <EMAIL ADDRESS>
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package build
 
 import (
@@ -20,10 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 )
-
-const SCRIPT = "local_build.sh"
-
-var rootDir string
 
 func validateArgs(args []string) error {
 	if len(args) < 2 {
@@ -42,12 +24,12 @@ func init() {
 	BuildCmd.Flags().BoolVarP(&onlyCompile, "only-compile", "c", false, "Only compile/build the program")
 }
 
-// buildCmd represents the build command
+// BuildCmd represents the build command
 var BuildCmd = &cobra.Command{
-	Use:   "build",
-	Short: fmt.Sprintf("Builds a program based on %s", SCRIPT),
-	Long: fmt.Sprintf(`Builds a program stored on local filesystem. The input is the path to directory. 
-The input directory must contain file %s which is used to build the file.`, SCRIPT),
+	Use:   "build <src> <output>",
+	Short: "Builds and runs a program inside docker",
+	Long: `Builds a program stored on local filesystem. The input is the full path of the file to build/run.
+Use the dry run mode to see the exact docker command used to build/run program.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := validateArgs(args)
 		if err != nil {
@@ -55,6 +37,6 @@ The input directory must contain file %s which is used to build the file.`, SCRI
 			return
 		}
 		src, outFile := args[0], args[1]
-		runFunc(src, outFile, dryRun)
+		RunFunc(src, outFile, dryRun)
 	},
 }

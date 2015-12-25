@@ -89,12 +89,12 @@ func dockerCmd(src, outFile string, onlyCompile bool) []string {
 	return commandSlice
 }
 
-func runFunc(src, outFile string, dryRun bool) {
+func RunFunc(src, outFile string, dryRun bool) (string, string, error) {
 	command := dockerCmd(src, outFile, onlyCompile)
 	if dryRun {
 		//fmt.Printf("%#v\n", command)
 		fmt.Printf("%s \"%s\"\n", strings.Join(command[:len(command)-1], " "), command[len(command)-1])
-		return
+		return "", "", nil
 	}
 	var out bytes.Buffer
 	var stderr bytes.Buffer
@@ -102,8 +102,5 @@ func runFunc(src, outFile string, dryRun bool) {
 	execCmd.Stdout = &out
 	execCmd.Stderr = &stderr
 	err := execCmd.Run()
-	if err != nil {
-		fmt.Println(fmt.Sprint(err) + stderr.String())
-		return
-	}
+	return out.String(), stderr.String(), err
 }
