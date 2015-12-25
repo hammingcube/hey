@@ -33,7 +33,7 @@ const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /a
 var ScriptTemplates = map[string]map[string]string{
 	"cpp": map[string]string{
 		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
-		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec &&  /dest/exec {{if .Input}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}",
+		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec &&  /dest/exec {{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}",
 	},
 }
 
@@ -45,6 +45,7 @@ type Config struct {
 	Output      string
 	Path        string
 	Input       string
+	InputExists bool
 	Lang        string
 	Container   string
 	Script      string
@@ -79,13 +80,18 @@ func dockerCmd(src, outFile string) []string {
 		Path:        MustStr(filepath.Abs(filepath.Dir(src))),
 		Output:      filepath.Base(outFile),
 		Destination: MustStr(filepath.Abs(filepath.Dir(outFile))),
-		Input:       "", //filepath.Join(filepath.Dir(src), "input.txt"),
+		Input:       filepath.Join(filepath.Dir(src), "input.txt"),
 		Lang:        lang,
 		Container:   containersMap[lang],
 	}
+	if _, err := os.Stat(config.Input); err == nil {
+		config.InputExists = true
+	}
+
+	todo := map[bool]string{true: "compile", false: "compile-and-run"}[onlyCompile]
 
 	var b bytes.Buffer
-	scriptTemplate := template.Must(template.New("script").Parse(ScriptTemplates[lang]["compile-and-run"]))
+	scriptTemplate := template.Must(template.New("script").Parse(ScriptTemplates[lang][todo]))
 	err := scriptTemplate.Execute(&b, config)
 	if err != nil {
 		panic(err)
@@ -110,7 +116,8 @@ func validateArgs(args []string) error {
 }
 
 var (
-	dryRun bool
+	dryRun      bool
+	onlyCompile bool
 )
 
 // buildCmd represents the build command
@@ -157,4 +164,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	BuildCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Dry run the command")
+	BuildCmd.Flags().BoolVarP(&onlyCompile, "only-compile", "c", false, "Only compile/build the program")
 }
