@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/go-github/github"
+	. "github.com/maddyonline/hey/cmd"
 	_ "github.com/phayes/hookserve/hookserve"
 	"github.com/spf13/cobra"
 	"io/ioutil"

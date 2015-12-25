@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	. "github.com/maddyonline/hey/cmd"
 	"github.com/spf13/cobra"
 	"io/ioutil"
 	"log"
