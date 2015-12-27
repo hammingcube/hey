@@ -70,14 +70,28 @@ func init() {
 	JudgeCmd.Flags().BoolVarP(&opts.DryRun, "dry-run", "d", false, "Dry run the command")
 	JudgeCmd.Flags().BoolVarP(&opts.Raw, "raw", "r", false, "Use the raw mode of judging")
 	JudgeCmd.Flags().BoolVarP(&opts.NoDocker, "no-docker", "n", false, "Do not use docker")
-	JudgeCmd.Flags().StringVarP(&opts.Language, "language", "l", "", "The programming language of input program")
+	JudgeCmd.Flags().StringVarP(&opts.Language, "lang", "l", "cpp", "The programming language of input program")
 }
 
 func validateArgs(args []string) error {
-	if len(args) < 1 {
+	if len(args) < 2 {
 		return errors.New("Need at least one argument (input program directory)")
 	}
 	return nil
+}
+
+func MustStr(v string, err error) string {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func MustBytes(v []byte, err error) []byte {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
 
 // judgeCmd represents the judge command
@@ -90,19 +104,11 @@ var JudgeCmd = &cobra.Command{
 			fmt.Printf("%v\n", err)
 			return
 		}
-		destDirectory, _ := cmd.Flags().GetString("dest")
+		solnSrc, judgeOutput := args[0], args[1]
+		solnDir := MustStr(filepath.Abs(filepath.Dir(solnSrc)))
+		judgeDir := MustStr(filepath.Abs(filepath.Dir(judgeOutput)))
+		judgeOutputFile := MustStr(filepath.Abs(judgeOutput))
 
-		solnDir := args[0]
-		fmt.Printf("%#v\n", opts)
-		fmt.Printf("%#v\n", args)
-		fmt.Printf("%#v\n", destDirectory)
-		fmt.Printf("solnDir: %s\n", solnDir)
-
-		solnDir, err := filepath.Abs(solnDir)
-		if err != nil {
-			fmt.Println("Error resolving path: %s", err)
-			return
-		}
 		// Check for at most 4-level of nesting
 		possibleConfigFiles := []string{
 			filepath.Join(solnDir, PROBLEM_CONFIG),
@@ -110,92 +116,114 @@ var JudgeCmd = &cobra.Command{
 			filepath.Join(solnDir, "../../", PROBLEM_CONFIG),
 			filepath.Join(solnDir, "../../../", PROBLEM_CONFIG),
 		}
-		fmt.Println(possibleConfigFiles)
+
 		probCfg := ""
 		for _, probCfg = range possibleConfigFiles {
-			fmt.Println(probCfg)
 			if _, err := os.Stat(probCfg); err == nil {
 				break
 			}
 		}
-		fmt.Println(probCfg)
 		data, err := ioutil.ReadFile(probCfg)
 		//fmt.Println(data)
 		//v := map[string]interface{}{}
 
-		type Location struct {
-			Url  string `json:"url"`
-			Path string `json:"path"`
+		type Details struct {
+			Url      string `json:"url"`
+			Path     string `json:"path"`
+			Src      string `json:"src"`
+			Lang     string `json:"lang"`
+			LocalSrc string `json:"local_src"`
 		}
 
 		v := struct {
-			PrimarySolution  Location `json:"primary-solution"`
-			PrimaryGenerator Location `json:"primary-generator"`
-			PrimaryRunner    Location `json:"primary-runner"`
+			PrimarySolution  Details `json:"primary-solution"`
+			PrimaryGenerator Details `json:"primary-generator"`
+			PrimaryRunner    Details `json:"primary-runner"`
+			MySolution       Details `json:"my-solution"`
 		}{}
-
 		json.Unmarshal(data, &v)
-		fmt.Println(v)
-		rootDir, _ := filepath.Abs(".")
+		v.MySolution = Details{
+			Src:      solnSrc,
+			Lang:     opts.Language,
+			LocalSrc: MustStr(filepath.Abs(filepath.Join(solnDir, solnSrc))),
+		}
+		fmt.Printf("%s\n", v)
+		rootDir := judgeDir
 		workdir := "work_dir"
 		//var repo, owner string
-		fmt.Println(v.PrimarySolution.Url)
 		lookFor := filepath.Join(workdir, v.PrimarySolution.Url, ".git")
-		fmt.Println(lookFor)
-
 		if _, err := os.Stat(lookFor); err == nil {
-			fmt.Println("Found Directory")
 			os.Chdir(filepath.Join(workdir, v.PrimarySolution.Url))
 			out, err := exec.Command("git", "pull").Output()
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Printf("The output of command is %s\n", out)
+			fmt.Println(out)
 		} else {
-			fmt.Println("Cannot find directory")
 			dir, _ := filepath.Abs(filepath.Join(workdir, v.PrimarySolution.Url))
-			fmt.Printf("Making %s directory\n", dir)
 			err := os.MkdirAll(dir, 0777)
 			os.Chdir(filepath.Join(dir, ".."))
 			gitUrl := fmt.Sprintf("https://%s", v.PrimarySolution.Url)
-			fmt.Println(gitUrl)
 			out, err := exec.Command("git", "clone", gitUrl).Output()
-			fmt.Printf("out: %s, err: %v\n", out, err)
+			fmt.Printf("%s\n%v\n", out, err)
 		}
-		fmt.Println(rootDir)
-		primary_soln := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, v.PrimarySolution.Path)
-		gen := filepath.Join(rootDir, workdir, v.PrimaryGenerator.Url, v.PrimaryGenerator.Path)
-		runtest := filepath.Join(rootDir, workdir, v.PrimaryRunner.Url, v.PrimaryRunner.Path)
+		setLocalSrc := func(rootDir, workDir string, d *Details) {
+			d.LocalSrc = MustStr(filepath.Abs(filepath.Join(rootDir, workDir, d.Url, d.Path, d.Src)))
+		}
+		setLocalSrc(rootDir, workdir, &v.PrimarySolution)
+		setLocalSrc(rootDir, workdir, &v.PrimaryGenerator)
+		setLocalSrc(rootDir, workdir, &v.PrimaryRunner)
 
-		fmt.Println("finally")
-		fmt.Printf("%s\n%s\n%s\n%s\n", runtest, gen, solnDir, primary_soln)
+		fmt.Println("finally\n")
+		fmt.Printf("%s\n", MustBytes(json.MarshalIndent(v, "", "    ")))
 
-		return
+		buildIt := func(d *Details, outputName string) {
+			_, prog_stderr, err := build.RunFunc(&build.Options{
+				Src:         d.LocalSrc,
+				OutFile:     filepath.Join(rootDir, workdir, outputName),
+				DryRun:      false,
+				Language:    d.Lang,
+				OnlyCompile: true,
+			})
+			if prog_stderr != "" || err != nil {
+				fmt.Printf("Err: %v\nProg Stderr: %s\n", err, prog_stderr)
+				panic("Something went wrong")
+			}
+		}
+		buildIt(&v.MySolution, "my-soln")
+		buildIt(&v.PrimarySolution, "primary-soln")
+		buildIt(&v.PrimaryGenerator, "primary-gen")
+		buildIt(&v.PrimaryRunner, "primary-runner")
 
-		build.BuildCmd.Run(nil, []string{runtest, "runtest"})
-		build.BuildCmd.Run(nil, []string{gen, "gen"})
-		build.BuildCmd.Run(nil, []string{solnDir, "my-soln"})
-		build.BuildCmd.Run(nil, []string{primary_soln, "primary-soln"})
-
-		rootDirectory, _ := cmd.Flags().GetString("rootDirectory")
-
-		destDir := filepath.Join(rootDirectory, destDirectory)
-		runCmd := fmt.Sprintf("docker run --rm -v %s:/app -w /app ubuntu ./runtest ./gen ./my-soln ./primary-soln", destDir)
-		cmds := strings.Split(runCmd, " ")
-		finalOutput, err := exec.Command("docker", cmds[1:]...).CombinedOutput()
+		destDir := MustStr(filepath.Abs(filepath.Join(rootDir, workdir)))
+		runCmd := fmt.Sprintf("docker run --rm -v %s:/app -w /app ubuntu ./primary-runner ./primary-gen ./my-soln ./primary-soln", destDir)
 		fmt.Println(runCmd)
-		fmt.Println(finalOutput)
-		fmt.Println(err)
-		jsonBytes, err := ioutil.ReadFile(path.Join(destDir, "status.json"))
-		fmt.Println(string(jsonBytes))
-		fmt.Println()
+		cmds := strings.Split(runCmd, " ")
+		_, err = exec.Command(cmds[0], cmds[1:]...).CombinedOutput()
+		if err != nil {
+			fmt.Printf("%v\n", err)
+			return
+		}
+		readFileAsString := func(filename string) string {
+			return string(MustBytes(ioutil.ReadFile(path.Join(destDir, filename))))
+		}
+		status := readFileAsString("status.json")
+		input := readFileAsString("input.txt")
+		out1 := readFileAsString("out1.txt")
+		out2 := readFileAsString("out2.txt")
 
-		//c5 := fmt.Sprintf(runCmd, binDir)
-
-		//client := github.NewClient(nil)
-		//opt := &github.RepositoryContentGetOptions{"master"}
-		//doIt(client, "maddyonline", "epibook.github.io", opt)
-
+		theOutput := struct {
+			Status string `json:"status"`
+			Input  string `json:"input"`
+			Out1   string `json:"out1"`
+			Out2   string `json:"out2"`
+		}{status, input, out1, out2}
+		fmt.Printf("%s\n", MustBytes(json.MarshalIndent(theOutput, "", "    ")))
+		fmt.Printf("Writing output to %s\n", judgeOutputFile)
+		err = ioutil.WriteFile(judgeOutputFile, MustBytes(json.Marshal(theOutput)), 0755)
+		if err != nil {
+			panic(err)
+		}
 	},
 }
 

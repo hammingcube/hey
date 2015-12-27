@@ -12,10 +12,11 @@ import (
 )
 
 type Options struct {
-	Src      string
-	OutFile  string
-	DryRun   bool
-	Language string
+	Src         string
+	OutFile     string
+	DryRun      bool
+	Language    string
+	OnlyCompile bool
 }
 
 const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /app {{.Container}} sh -c"
@@ -82,7 +83,7 @@ func dockerCmd(opts *Options) []string {
 		config.InputExists = true
 	}
 
-	todo := map[bool]string{true: "compile", false: "compile-and-run"}[onlyCompile]
+	todo := map[bool]string{true: "compile", false: "compile-and-run"}[opts.OnlyCompile]
 
 	var b bytes.Buffer
 	scriptTemplate := template.Must(template.New("script").Parse(ScriptTemplates[lang][todo]))

@@ -40,10 +40,11 @@ Use the dry run mode to see the exact docker command used to build/run program.`
 		}
 		src, outFile := args[0], args[1]
 		opts := &Options{
-			Src:      src,
-			OutFile:  outFile,
-			DryRun:   dryRun,
-			Language: lang,
+			Src:         src,
+			OutFile:     outFile,
+			DryRun:      dryRun,
+			Language:    lang,
+			OnlyCompile: onlyCompile,
 		}
 		_, prog_stderr, err := RunFunc(opts)
 		if prog_stderr != "" || err != nil {
