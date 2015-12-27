@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/google/go-github/github"
 	"github.com/maddyonline/hey/cmd/build"
+	"github.com/maddyonline/hey/utils"
 	_ "github.com/phayes/hookserve/hookserve"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -28,6 +29,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
@@ -70,14 +72,25 @@ func init() {
 	JudgeCmd.Flags().BoolVarP(&opts.DryRun, "dry-run", "d", false, "Dry run the command")
 	JudgeCmd.Flags().BoolVarP(&opts.Raw, "raw", "r", false, "Use the raw mode of judging")
 	JudgeCmd.Flags().BoolVarP(&opts.NoDocker, "no-docker", "n", false, "Do not use docker")
-	JudgeCmd.Flags().StringVarP(&opts.Language, "lang", "l", "cpp", "The programming language of input program")
+	JudgeCmd.Flags().StringVarP(&opts.Language, "lang", "l", "", "The programming language of input program")
 }
 
-func validateArgs(args []string) error {
-	if len(args) < 2 {
-		return errors.New("Need at least one argument (input program directory)")
+func validateArgs(args []string) (string, string, error) {
+	if len(args) < 1 {
+		return "", "", errors.New("Need at least one argument (input program directory)")
 	}
-	return nil
+	if len(args) > 1 {
+		return args[0], args[1], nil
+	}
+	u, err := user.Current()
+	if err != nil {
+		return "", "", err
+	}
+	dir, err := utils.CreateDirIfReqd(filepath.Join(u.HomeDir, "hey-judge"))
+	if err != nil {
+		return "", "", err
+	}
+	return args[0], filepath.Join(dir, "judge-output.json"), nil
 }
 
 func MustStr(v string, err error) string {
@@ -100,11 +113,11 @@ var JudgeCmd = &cobra.Command{
 	Short: "Builds, runs, and judges an input program",
 	Long:  longUsage(),
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := validateArgs(args); err != nil {
-			fmt.Printf("%v\n", err)
+		solnSrc, judgeOutput, err := validateArgs(args)
+		if err != nil {
+			fmt.Printf("Error validating args: %v\n", err)
 			return
 		}
-		solnSrc, judgeOutput := args[0], args[1]
 		solnDir := MustStr(filepath.Abs(filepath.Dir(solnSrc)))
 		judgeDir := MustStr(filepath.Abs(filepath.Dir(judgeOutput)))
 		judgeOutputFile := MustStr(filepath.Abs(judgeOutput))
@@ -142,25 +155,33 @@ var JudgeCmd = &cobra.Command{
 			MySolution       Details `json:"my-solution"`
 		}{}
 		json.Unmarshal(data, &v)
+		var lang string
+		if opts.Language != "" {
+			lang = opts.Language
+		} else {
+			parts := strings.Split(solnSrc, ".")
+			ext := parts[len(parts)-1]
+			lang = map[string]string{"cpp": "cpp", "cc": "cpp", "c": "cpp", "py": "py", "go": "go"}[ext]
+		}
 		v.MySolution = Details{
 			Src:      solnSrc,
-			Lang:     opts.Language,
+			Lang:     lang,
 			LocalSrc: MustStr(filepath.Abs(filepath.Join(solnDir, solnSrc))),
 		}
 		fmt.Printf("%s\n", v)
 		rootDir := judgeDir
 		workdir := "work_dir"
 		//var repo, owner string
-		lookFor := filepath.Join(workdir, v.PrimarySolution.Url, ".git")
+		lookFor := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, ".git")
 		if _, err := os.Stat(lookFor); err == nil {
-			os.Chdir(filepath.Join(workdir, v.PrimarySolution.Url))
+			os.Chdir(filepath.Join(rootDir, workdir, v.PrimarySolution.Url))
 			out, err := exec.Command("git", "pull").Output()
 			if err != nil {
 				log.Fatal(err)
 			}
 			fmt.Println(out)
 		} else {
-			dir, _ := filepath.Abs(filepath.Join(workdir, v.PrimarySolution.Url))
+			dir, _ := filepath.Abs(filepath.Join(rootDir, workdir, v.PrimarySolution.Url))
 			err := os.MkdirAll(dir, 0777)
 			os.Chdir(filepath.Join(dir, ".."))
 			gitUrl := fmt.Sprintf("https://%s", v.PrimarySolution.Url)
