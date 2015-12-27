@@ -23,7 +23,17 @@ const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /a
 
 const RUN_EXEC_WITH_INPUT = "/dest/exec {{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}"
 
+var containersMap = map[string]string{
+	"c":   "glot/clang",
+	"cpp": "glot/clang",
+	"go":  "glot/golang",
+}
+
 var ScriptTemplates = map[string]map[string]string{
+	"c": map[string]string{
+		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
+		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
+	},
 	"cpp": map[string]string{
 		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
 		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
@@ -64,11 +74,6 @@ func MustStr(t string, err error) string {
 }
 
 func dockerCmd(opts *Options) []string {
-	containersMap := map[string]string{
-		"cpp": "glot/clang",
-		"go":  "glot/golang",
-	}
-
 	src, lang, outFile := opts.Src, opts.Language, opts.OutFile
 	config := &Config{
 		Src:         filepath.Base(src),
@@ -105,9 +110,8 @@ func dockerCmd(opts *Options) []string {
 
 func RunFunc(opts *Options) (string, string, error) {
 	command := dockerCmd(opts)
+	fmt.Printf("%s \"%s\"\n", strings.Join(command[:len(command)-1], " "), command[len(command)-1])
 	if opts.DryRun {
-		//fmt.Printf("%#v\n", command)
-		fmt.Printf("%s \"%s\"\n", strings.Join(command[:len(command)-1], " "), command[len(command)-1])
 		return "", "", nil
 	}
 	var out bytes.Buffer
