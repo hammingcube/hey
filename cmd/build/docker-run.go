@@ -11,12 +11,25 @@ import (
 	"text/template"
 )
 
+type Options struct {
+	Src      string
+	OutFile  string
+	DryRun   bool
+	Language string
+}
+
 const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /app {{.Container}} sh -c"
+
+const RUN_EXEC_WITH_INPUT = "/dest/exec {{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}"
 
 var ScriptTemplates = map[string]map[string]string{
 	"cpp": map[string]string{
 		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
-		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec &&  /dest/exec {{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}",
+		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
+	},
+	"go": map[string]string{
+		"compile":         "go build -o /dest/{{.Output}} /app/{{.Src}}",
+		"compile-and-run": "go build -o /dest/exec /app/{{.Src}} && /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
 	},
 }
 
@@ -49,13 +62,13 @@ func MustStr(t string, err error) string {
 	return t
 }
 
-func dockerCmd(src, outFile string, onlyCompile bool) []string {
+func dockerCmd(opts *Options) []string {
 	containersMap := map[string]string{
-		"cpp":    "glot/clang",
-		"golang": "glot/golang",
+		"cpp": "glot/clang",
+		"go":  "glot/golang",
 	}
 
-	lang := "cpp"
+	src, lang, outFile := opts.Src, opts.Language, opts.OutFile
 	config := &Config{
 		Src:         filepath.Base(src),
 		Path:        MustStr(filepath.Abs(filepath.Dir(src))),
@@ -89,9 +102,9 @@ func dockerCmd(src, outFile string, onlyCompile bool) []string {
 	return commandSlice
 }
 
-func RunFunc(src, outFile string, dryRun bool) (string, string, error) {
-	command := dockerCmd(src, outFile, onlyCompile)
-	if dryRun {
+func RunFunc(opts *Options) (string, string, error) {
+	command := dockerCmd(opts)
+	if opts.DryRun {
 		//fmt.Printf("%#v\n", command)
 		fmt.Printf("%s \"%s\"\n", strings.Join(command[:len(command)-1], " "), command[len(command)-1])
 		return "", "", nil

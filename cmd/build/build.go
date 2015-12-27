@@ -17,11 +17,13 @@ func validateArgs(args []string) error {
 var (
 	dryRun      bool
 	onlyCompile bool
+	lang        string
 )
 
 func init() {
 	BuildCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Dry run the command")
 	BuildCmd.Flags().BoolVarP(&onlyCompile, "only-compile", "c", false, "Only compile/build the program")
+	BuildCmd.Flags().StringVarP(&lang, "lang", "l", "cpp", "Programming language")
 }
 
 // BuildCmd represents the build command
@@ -37,6 +39,15 @@ Use the dry run mode to see the exact docker command used to build/run program.`
 			return
 		}
 		src, outFile := args[0], args[1]
-		RunFunc(src, outFile, dryRun)
+		opts := &Options{
+			Src:      src,
+			OutFile:  outFile,
+			DryRun:   dryRun,
+			Language: lang,
+		}
+		_, prog_stderr, err := RunFunc(opts)
+		if prog_stderr != "" || err != nil {
+			fmt.Printf("Err: %v\nProg Stderr: %s\n", err, prog_stderr)
+		}
 	},
 }

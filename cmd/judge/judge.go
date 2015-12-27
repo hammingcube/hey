@@ -96,7 +96,8 @@ var JudgeCmd = &cobra.Command{
 		fmt.Printf("%#v\n", opts)
 		fmt.Printf("%#v\n", args)
 		fmt.Printf("%#v\n", destDirectory)
-		return
+		fmt.Printf("solnDir: %s\n", solnDir)
+
 		solnDir, err := filepath.Abs(solnDir)
 		if err != nil {
 			fmt.Println("Error resolving path: %s", err)
@@ -159,12 +160,17 @@ var JudgeCmd = &cobra.Command{
 			gitUrl := fmt.Sprintf("https://%s", v.PrimarySolution.Url)
 			fmt.Println(gitUrl)
 			out, err := exec.Command("git", "clone", gitUrl).Output()
-			fmt.Printf("out: %s, err: %s\n", out, err)
+			fmt.Printf("out: %s, err: %v\n", out, err)
 		}
 		fmt.Println(rootDir)
 		primary_soln := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, v.PrimarySolution.Path)
 		gen := filepath.Join(rootDir, workdir, v.PrimaryGenerator.Url, v.PrimaryGenerator.Path)
 		runtest := filepath.Join(rootDir, workdir, v.PrimaryRunner.Url, v.PrimaryRunner.Path)
+
+		fmt.Println("finally")
+		fmt.Printf("%s\n%s\n%s\n%s\n", runtest, gen, solnDir, primary_soln)
+
+		return
 
 		build.BuildCmd.Run(nil, []string{runtest, "runtest"})
 		build.BuildCmd.Run(nil, []string{gen, "gen"})
