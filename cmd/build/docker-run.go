@@ -24,8 +24,8 @@ const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /a
 const RUN_EXEC_WITH_INPUT = "/dest/exec {{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}"
 
 var containersMap = map[string]string{
-	"c":   "glot/clang",
-	"cpp": "glot/clang",
+	"c":   "gcc:4.9",
+	"cpp": "gcc:4.9",
 	"go":  "glot/golang",
 }
 

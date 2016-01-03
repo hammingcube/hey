@@ -166,7 +166,7 @@ var JudgeCmd = &cobra.Command{
 		v.MySolution = Details{
 			Src:      solnSrc,
 			Lang:     lang,
-			LocalSrc: MustStr(filepath.Abs(filepath.Join(solnDir, solnSrc))),
+			LocalSrc: MustStr(filepath.Abs(solnSrc)),
 		}
 		fmt.Printf("%s\n", v)
 		rootDir := judgeDir
