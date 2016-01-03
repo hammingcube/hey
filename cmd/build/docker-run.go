@@ -26,7 +26,7 @@ const RUN_EXEC_WITH_INPUT = "/dest/exec {{if .InputExists}} < /app/{{.Input}} {{
 var containersMap = map[string]string{
 	"c":   "gcc:4.9",
 	"cpp": "gcc:4.9",
-	"go":  "glot/golang",
+	"go":  "golang",
 }
 
 var ScriptTemplates = map[string]map[string]string{
