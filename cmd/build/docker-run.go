@@ -21,26 +21,40 @@ type Options struct {
 
 const TEMPL = "docker run --rm -v {{.Path}}:/app -v {{.Destination}}:/dest -w /app {{.Container}} sh -c"
 
-const RUN_EXEC_WITH_INPUT = "/dest/exec {{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}"
+const RUN_EXEC_WITH_INPUT = "{{if .InputExists}} < /app/{{.Input}} {{end}} > /dest/{{.Output}}"
+const CPP_COMPILE = "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}"
+const CPP_COMPILE_AND_RUN = "g++ -std=c++11 /app/{{.Src}} -o /dest/exec && /dest/exec " + RUN_EXEC_WITH_INPUT + " && rm -f /dest/exec"
+const PY_COMPILE = "echo '#!/usr/bin/env python' > /dest/{{.Output}} && cat /app/{{.Src}} >> /dest/{{.Output}} && chmod +x /dest/{{.Output}}"
+const PY_COMPILE_AND_RUN = "python /app/{{.Src}}" + RUN_EXEC_WITH_INPUT
 
 var containersMap = map[string]string{
 	"c":   "gcc:4.9",
 	"cpp": "gcc:4.9",
 	"go":  "golang",
+	"py2": "python:2.7",
+	"py3": "python:3",
 }
 
 var ScriptTemplates = map[string]map[string]string{
 	"c": map[string]string{
-		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
-		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
+		"compile":         CPP_COMPILE,
+		"compile-and-run": CPP_COMPILE_AND_RUN,
 	},
 	"cpp": map[string]string{
-		"compile":         "g++ -std=c++11 /app/{{.Src}} -o /dest/{{.Output}}",
-		"compile-and-run": "g++ -std=c++11 /app/{{.Src}} -o /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
+		"compile":         CPP_COMPILE,
+		"compile-and-run": CPP_COMPILE_AND_RUN,
 	},
 	"go": map[string]string{
 		"compile":         "go build -o /dest/{{.Output}} /app/{{.Src}}",
-		"compile-and-run": "go build -o /dest/exec /app/{{.Src}} && /dest/exec" + " && " + RUN_EXEC_WITH_INPUT,
+		"compile-and-run": "go build -o /dest/exec /app/{{.Src}} && /dest/exec && /dest/exec " + RUN_EXEC_WITH_INPUT + " && rm -f /dest/exec",
+	},
+	"py2": map[string]string{
+		"compile":         PY_COMPILE,
+		"compile-and-run": PY_COMPILE_AND_RUN,
+	},
+	"py3": map[string]string{
+		"compile":         PY_COMPILE,
+		"compile-and-run": PY_COMPILE_AND_RUN,
 	},
 }
 
