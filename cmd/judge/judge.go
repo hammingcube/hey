@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/go-github/github"
-	"github.com/maddyonline/hey/cmd/build"
 	"github.com/maddyonline/hey/utils"
 	_ "github.com/phayes/hookserve/hookserve"
 	"github.com/spf13/cobra"
@@ -53,12 +52,14 @@ func longUsage() string {
 
 const PROBLEM_CONFIG = "problem-config.json"
 
-var opts = struct {
+type Options struct {
 	DryRun   bool
 	Raw      bool
 	NoDocker bool
 	Language string
-}{}
+}
+
+var opts = &Options{}
 
 func init() {
 	// Here you will define your flags and configuration settings.
@@ -119,7 +120,6 @@ var JudgeCmd = &cobra.Command{
 			return
 		}
 		solnDir := MustStr(filepath.Abs(filepath.Dir(solnSrc)))
-		judgeDir := MustStr(filepath.Abs(filepath.Dir(judgeOutput)))
 		judgeOutputFile := MustStr(filepath.Abs(judgeOutput))
 
 		// Check for at most 4-level of nesting
@@ -140,105 +140,11 @@ var JudgeCmd = &cobra.Command{
 		//fmt.Println(data)
 		//v := map[string]interface{}{}
 
-		type Details struct {
-			Url      string `json:"url"`
-			Path     string `json:"path"`
-			Src      string `json:"src"`
-			Lang     string `json:"lang"`
-			LocalSrc string `json:"local_src"`
-		}
-
-		v := struct {
-			PrimarySolution  Details `json:"primary-solution"`
-			PrimaryGenerator Details `json:"primary-generator"`
-			PrimaryRunner    Details `json:"primary-runner"`
-			MySolution       Details `json:"my-solution"`
-		}{}
-		json.Unmarshal(data, &v)
-		var lang string
-		if opts.Language != "" {
-			lang = opts.Language
-		} else {
-			parts := strings.Split(solnSrc, ".")
-			ext := parts[len(parts)-1]
-			lang = map[string]string{"cpp": "cpp", "cc": "cpp", "c": "cpp", "py": "py", "go": "go"}[ext]
-		}
-		v.MySolution = Details{
-			Src:      solnSrc,
-			Lang:     lang,
-			LocalSrc: MustStr(filepath.Abs(solnSrc)),
-		}
-		fmt.Printf("%s\n", v)
-		rootDir := judgeDir
-		workdir := "work_dir"
-		//var repo, owner string
-		lookFor := filepath.Join(rootDir, workdir, v.PrimarySolution.Url, ".git")
-		if _, err := os.Stat(lookFor); err == nil {
-			os.Chdir(filepath.Join(rootDir, workdir, v.PrimarySolution.Url))
-			out, err := exec.Command("git", "pull").Output()
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Println(out)
-		} else {
-			dir, _ := filepath.Abs(filepath.Join(rootDir, workdir, v.PrimarySolution.Url))
-			err := os.MkdirAll(dir, 0777)
-			os.Chdir(filepath.Join(dir, ".."))
-			gitUrl := fmt.Sprintf("https://%s", v.PrimarySolution.Url)
-			out, err := exec.Command("git", "clone", gitUrl).Output()
-			fmt.Printf("%s\n%v\n", out, err)
-		}
-		setLocalSrc := func(rootDir, workDir string, d *Details) {
-			d.LocalSrc = MustStr(filepath.Abs(filepath.Join(rootDir, workDir, d.Url, d.Path, d.Src)))
-		}
-		setLocalSrc(rootDir, workdir, &v.PrimarySolution)
-		setLocalSrc(rootDir, workdir, &v.PrimaryGenerator)
-		setLocalSrc(rootDir, workdir, &v.PrimaryRunner)
-
-		fmt.Println("finally\n")
-		fmt.Printf("%s\n", MustBytes(json.MarshalIndent(v, "", "    ")))
-
-		buildIt := func(d *Details, outputName string) {
-			_, prog_stderr, err := build.RunFunc(&build.Options{
-				Src:         d.LocalSrc,
-				OutFile:     filepath.Join(rootDir, workdir, outputName),
-				DryRun:      false,
-				Language:    d.Lang,
-				OnlyCompile: true,
-			})
-			if prog_stderr != "" || err != nil {
-				fmt.Printf("Err: %v\nProg Stderr: %s\n", err, prog_stderr)
-				panic("Something went wrong")
-			}
-		}
-		buildIt(&v.MySolution, "my-soln")
-		buildIt(&v.PrimarySolution, "primary-soln")
-		buildIt(&v.PrimaryGenerator, "primary-gen")
-		buildIt(&v.PrimaryRunner, "primary-runner")
-
-		destDir := MustStr(filepath.Abs(filepath.Join(rootDir, workdir)))
-		runCmd := fmt.Sprintf("docker run --rm -v %s:/app -w /app ubuntu ./primary-runner ./primary-gen ./my-soln ./primary-soln", destDir)
-		fmt.Println(runCmd)
-		cmds := strings.Split(runCmd, " ")
-		_, err = exec.Command(cmds[0], cmds[1:]...).CombinedOutput()
+		theOutput, err := RunFunc(data, opts, solnSrc, judgeOutput)
+		fmt.Printf("err: %v", err)
 		if err != nil {
-			fmt.Printf("%v\n", err)
-			return
+			panic(err)
 		}
-		readFileAsString := func(filename string) string {
-			return string(MustBytes(ioutil.ReadFile(path.Join(destDir, filename))))
-		}
-		status := readFileAsString("status.json")
-		input := readFileAsString("input.txt")
-		out1 := readFileAsString("out1.txt")
-		out2 := readFileAsString("out2.txt")
-
-		theOutput := struct {
-			Status string `json:"status"`
-			Input  string `json:"input"`
-			Out1   string `json:"out1"`
-			Out2   string `json:"out2"`
-		}{status, input, out1, out2}
 		fmt.Printf("%s\n", MustBytes(json.MarshalIndent(theOutput, "", "    ")))
 		fmt.Printf("Writing output to %s\n", judgeOutputFile)
 		err = ioutil.WriteFile(judgeOutputFile, MustBytes(json.Marshal(theOutput)), 0755)
